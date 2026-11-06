@@ -1,0 +1,17 @@
+{
+  "unknown_code": "unknown",
+  "diseases": {
+    "stroke": {
+      "name": "뇌졸중/뇌경색",
+      "priority": 1,
+      "keywords": ["마비", "팔다리", "어눌", "발음", "편마비", "안면", "얼굴이 처", "한쪽", "말이 안"],
+      "api_keys": ["MKioskTy1", "MKioskTy2"]
+    },
+    "cardiac": {
+      "name": "심근경색",
+      "priority": 2,
+      "keywords": ["가슴", "심장", "흉통", "쥐어짜", "식은땀", "심정지"],
+      "api_keys": ["MKioskTy3"]
+    }
+  }
+}

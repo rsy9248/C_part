@@ -1,12 +1,17 @@
 import json
 import os
 import sqlite3
+import sys
 import time
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
 import requests
 from dotenv import load_dotenv
+
+# 상위 폴더 경로 추가하여 rules 임포트 가능하게 설정
+sys.path.append(str(Path(__file__).resolve().parent.parent))
+from rules.disease_rules import disease_api_keys
 
 env_path = Path(__file__).resolve().parent.parent / ".env"
 load_dotenv(dotenv_path=env_path)
@@ -40,10 +45,10 @@ REGION_PARAM = {
     OP_STRM_LIST: "Q0",
 }
 
-# 중증질환 수용가능 필드 -> 뇌졸중/심장 매핑 (문서의 응답 명세로 반드시 확인!)
-# 값이 "Y"면 수용 가능으로 판단합니다.
-STROKE_KEYS = ["MKioskTy1", "MKioskTy2"]  # 뇌출혈수술, 뇌경색 재관류 등
-CARDIAC_KEYS = ["MKioskTy3"]              # 심근경색 재관류 등
+# 질환별 중증질환 수용가능 API 필드 (rules/disease_rules.json의 api_keys에서 로드)
+# {"stroke": ["MKioskTy1", "MKioskTy2"], "cardiac": ["MKioskTy3"], ...}
+# 값이 "Y"인 필드가 하나라도 있으면 수용 가능으로 판단합니다.
+DISEASE_API_KEYS = disease_api_keys()
 
 # 병상 응답의 장비/병상 필드 (필드 의미는 문서의 응답 명세로 확인!)
 EQUIP_KEYS = {
@@ -84,7 +89,8 @@ COLUMNS = [
     ("operating_rooms", "INTEGER"),
     ("general_beds", "INTEGER"),
     ("updated_at", "TEXT"),
-    ("messages", "TEXT"),  # JSON 문자열
+    ("messages", "TEXT"),        # JSON 문자열
+    ("disease_status", "TEXT"),  # JSON 문자열 {"stroke": "Y", "cardiac": "N", ...}
 ]
 COLUMN_NAMES = [name for name, _ in COLUMNS]
 
@@ -108,6 +114,7 @@ DEFAULTS = {
     "general_beds": 0,
     "updated_at": "",
     "messages": "[]",
+    "disease_status": "{}",
 }
 
 
@@ -278,22 +285,29 @@ def _index_by_hpid(items):
 # ----------------------------------------------------------------------
 # 일괄 수집 + 병합
 # ----------------------------------------------------------------------
-def fetch_hospital_data():
-    """여러 오퍼레이션을 hpid 기준으로 합쳐 DB 저장용 리스트를 반환."""
+def fetch_hospital_data(allow_dummy=True):
+    """
+    여러 오퍼레이션을 hpid 기준으로 합쳐 DB 저장용 리스트를 반환.
+    - allow_dummy=True : 수집 실패 시 테스트용 더미 데이터를 반환 (개발/최초 실행용)
+    - allow_dummy=False: 수집 실패 시 빈 리스트를 반환 (주기적 갱신용, 더미가 DB에 섞이는 것 방지)
+    """
     if not SERVICE_KEY:
         print("🚨 [Collector] .env 파일에 PUBLIC_API_KEY가 설정되지 않았습니다.")
-        return get_dummy_items()
+        return get_dummy_items() if allow_dummy else []
 
     print("🔄 [Collector] 공공 API에서 실시간 병원 데이터 수집 시도 중...")
 
     beds = _fetch_operation(OP_BEDS)
     if not beds:
-        print("⚠️ [Collector] 병상 정보 수집 실패, 테스트용 더미 데이터를 대신 사용합니다.")
-        return get_dummy_items()
+        if allow_dummy:
+            print("⚠️ [Collector] 병상 정보 수집 실패, 테스트용 더미 데이터를 대신 사용합니다.")
+            return get_dummy_items()
+        print("⚠️ [Collector] 병상 정보 수집 실패, 더미 데이터는 사용하지 않고 기존 DB를 유지합니다.")
+        return []
 
     # 아래 오퍼레이션은 실패해도 병상 정보만으로 계속 진행합니다.
     optional = {
-        "중증질환 수용정보 (뇌졸중/심장 상태가 'N'으로 저장됨)": _fetch_operation(OP_SEVERE),
+        "중증질환 수용정보 (질환별 수용 상태가 'N'으로 저장됨)": _fetch_operation(OP_SEVERE),
         "응급의료기관 목록 (좌표/주소/전화 비어 있음)": _fetch_operation(OP_LIST),
         "외상센터 목록 (외상센터 표시 안 됨)": _fetch_operation(OP_STRM_LIST),
         "응급실/중증질환 메시지 (메시지 비어 있음)": _fetch_operation(OP_MSG),
@@ -302,7 +316,7 @@ def fetch_hospital_data():
         if result is None:
             print(f"⚠️ [Collector] {label} 수집 실패")
 
-    severe_by_id = _index_by_hpid(optional["중증질환 수용정보 (뇌졸중/심장 상태가 'N'으로 저장됨)"])
+    severe_by_id = _index_by_hpid(optional["중증질환 수용정보 (질환별 수용 상태가 'N'으로 저장됨)"])
     loc_by_id = _index_by_hpid(optional["응급의료기관 목록 (좌표/주소/전화 비어 있음)"])
     strm_by_id = _index_by_hpid(optional["외상센터 목록 (외상센터 표시 안 됨)"])
 
@@ -328,14 +342,18 @@ def fetch_hospital_data():
             lat = _to_float(_get(strm, "wgs84Lat", "latitude", "lat"))
             lng = _to_float(_get(strm, "wgs84Lon", "longitude", "lon", "lng"))
 
+        # 질환별 수용 가능 여부 {"stroke": "Y", "cardiac": "N", ...}
+        status = {code: _any_yes(sev, keys) for code, keys in DISEASE_API_KEYS.items()}
+
         h = {
             "hospital_id": hpid,
             "hospital_name": _get(item, "dutyName") or _get(loc, "dutyName", default=DEFAULTS["hospital_name"]),
             "lat": lat,
             "lng": lng,
             "emergency_beds": _to_int(_get(item, "hvec")),
-            "stroke_status": _any_yes(sev, STROKE_KEYS),
-            "cardiac_status": _any_yes(sev, CARDIAC_KEYS),
+            "disease_status": json.dumps(status),
+            "stroke_status": status.get("stroke", "N"),    # 기존 컬럼 호환용
+            "cardiac_status": status.get("cardiac", "N"),  # 기존 컬럼 호환용
             "address": _get(loc, "dutyAddr") or _get(strm, "dutyAddr"),
             "tel_main": _get(loc, "dutyTel1") or _get(strm, "dutyTel1"),
             "tel_er": _get(item, "dutyTel3") or _get(loc, "dutyTel3"),
@@ -491,6 +509,13 @@ def get_hospitals_from_db():
         except json.JSONDecodeError:
             messages = []
 
+        try:
+            status = json.loads(row["disease_status"] or "{}")
+        except json.JSONDecodeError:
+            status = {}
+        if not status:  # 마이그레이션 직후 구버전 행/더미 데이터 대비
+            status = {"stroke": row["stroke_status"], "cardiac": row["cardiac_status"]}
+
         hospitals.append({
             # 기존 응답 형식 (main.py 호환)
             "hospital_id": row["hospital_id"],
@@ -498,10 +523,7 @@ def get_hospitals_from_db():
             "lat": row["lat"],
             "lng": row["lng"],
             "emergency_beds": row["emergency_beds"],
-            "disease_status": {
-                "stroke": row["stroke_status"],
-                "cardiac": row["cardiac_status"],
-            },
+            "disease_status": status,
             # 추가 정보
             "address": row["address"],
             "tel_main": row["tel_main"],
