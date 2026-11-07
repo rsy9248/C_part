@@ -1,0 +1,136 @@
+{
+  "status": "ok",
+  "chiefComplaint": "신경학적 이상(마비·언어장애 등)",
+  "mappedConditions": [
+    "뇌졸중",
+    "뇌경색"
+  ],
+  "radiusSteps": [
+    {
+      "label": "5km",
+      "current": true,
+      "passed": false
+    },
+    {
+      "label": "15km",
+      "current": false,
+      "passed": false
+    },
+    {
+      "label": "30km",
+      "current": false,
+      "passed": false
+    },
+    {
+      "label": "50km",
+      "current": false,
+      "passed": false
+    },
+    {
+      "label": "안정화 우선",
+      "current": false,
+      "passed": false
+    }
+  ],
+  "currentRadiusKm": 5,
+  "hospitals": [
+    {
+      "id": "A",
+      "name": "가나다대학교병원",
+      "level": "권역응급의료센터",
+      "region": "춘천시",
+      "distanceKm": 1.0,
+      "etaMin": 2,
+      "lat": 37.509009,
+      "lng": 127.0,
+      "beds": [
+        {
+          "label": "응급실",
+          "count": 3
+        },
+        {
+          "label": "수술실",
+          "count": 2
+        },
+        {
+          "label": "입원실",
+          "count": 10
+        },
+        {
+          "label": "CT",
+          "count": null,
+          "available": true
+        },
+        {
+          "label": "MRI",
+          "count": null,
+          "available": false
+        },
+        {
+          "label": "혈관조영",
+          "count": null,
+          "available": true
+        }
+      ],
+      "accepts": [
+        "뇌졸중",
+        "뇌경색",
+        "심근경색"
+      ],
+      "phone": "02-111-0001",
+      "needsCheck": false
+    },
+    {
+      "id": "B",
+      "name": "B병원",
+      "level": "지역응급의료센터",
+      "region": "강남구",
+      "distanceKm": 3.01,
+      "etaMin": 6,
+      "lat": 37.527027,
+      "lng": 127.0,
+      "beds": [
+        {
+          "label": "응급실",
+          "count": 2
+        }
+      ],
+      "accepts": [
+        "뇌졸중",
+        "뇌경색"
+      ],
+      "phone": "02-222-2222",
+      "needsCheck": false
+    }
+  ],
+  "needsCheckHospitals": [
+    {
+      "id": "D",
+      "name": "D병원(병상없음)",
+      "level": "전문응급의료센터",
+      "region": "수원시",
+      "distanceKm": 2.0,
+      "etaMin": 4,
+      "lat": 37.518018,
+      "lng": 127.0,
+      "beds": [
+        {
+          "label": "응급실",
+          "count": 0
+        }
+      ],
+      "accepts": [
+        "뇌졸중",
+        "뇌경색"
+      ],
+      "phone": "",
+      "needsCheck": true
+    }
+  ],
+  "category": "neurologic deficit",
+  "categoryKnown": true,
+  "grade": 2,
+  "diseaseCode": "stroke",
+  "dataFetchedAt": 1793900000,
+  "dataStale": false
+}
