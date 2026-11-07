@@ -1,17 +1,97 @@
 {
+  "_comment": "category_map: A 파트 cc_category.py의 23개 주증상 범주 -> 질환 코드. 'unknown'은 질환 필터 없이 병상 여부만 확인. 의학 담당 팀원이 검토 후 값을 바꾸면 됩니다.",
   "unknown_code": "unknown",
+  "category_map": {
+    "chest pain": "cardiac",
+    "dyspnea": "unknown",
+    "injury": "unknown",
+    "abdominal pain": "unknown",
+    "flank/back pain": "unknown",
+    "headache": "unknown",
+    "dizziness": "unknown",
+    "syncope": "unknown",
+    "seizure": "unknown",
+    "mental change": "unknown",
+    "neurologic deficit": "stroke",
+    "gi bleeding": "unknown",
+    "bleeding": "unknown",
+    "vomiting/diarrhea": "unknown",
+    "fever": "unknown",
+    "weakness": "unknown",
+    "palpitation": "unknown",
+    "skin": "unknown",
+    "eye/ent": "unknown",
+    "urinary/genital": "unknown",
+    "psychiatric/intox": "unknown",
+    "pain (other)": "unknown",
+    "other": "unknown"
+  },
+  "category_labels": {
+    "chest pain": "흉통",
+    "dyspnea": "호흡곤란",
+    "injury": "외상/손상",
+    "abdominal pain": "복통",
+    "flank/back pain": "옆구리/허리 통증",
+    "headache": "두통",
+    "dizziness": "어지러움",
+    "syncope": "실신",
+    "seizure": "경련",
+    "mental change": "의식/정신 상태 변화",
+    "neurologic deficit": "신경학적 이상(마비·언어장애 등)",
+    "gi bleeding": "위장관 출혈",
+    "bleeding": "출혈",
+    "vomiting/diarrhea": "구토/설사",
+    "fever": "발열",
+    "weakness": "전신 쇠약",
+    "palpitation": "가슴 두근거림",
+    "skin": "피부 증상",
+    "eye/ent": "안과/이비인후과",
+    "urinary/genital": "비뇨·생식기",
+    "psychiatric/intox": "정신과/중독",
+    "pain (other)": "기타 통증",
+    "other": "기타"
+  },
   "diseases": {
     "stroke": {
       "name": "뇌졸중/뇌경색",
       "priority": 1,
-      "keywords": ["마비", "팔다리", "어눌", "발음", "편마비", "안면", "얼굴이 처", "한쪽", "말이 안"],
-      "api_keys": ["MKioskTy1", "MKioskTy2"]
+      "keywords": [
+        "마비",
+        "팔다리",
+        "어눌",
+        "발음",
+        "편마비",
+        "안면",
+        "얼굴이 처",
+        "한쪽",
+        "말이 안"
+      ],
+      "api_keys": [
+        "MKioskTy1",
+        "MKioskTy2"
+      ],
+      "conditions": [
+        "뇌졸중",
+        "뇌경색"
+      ]
     },
     "cardiac": {
       "name": "심근경색",
       "priority": 2,
-      "keywords": ["가슴", "심장", "흉통", "쥐어짜", "식은땀", "심정지"],
-      "api_keys": ["MKioskTy3"]
+      "keywords": [
+        "가슴",
+        "심장",
+        "흉통",
+        "쥐어짜",
+        "식은땀",
+        "심정지"
+      ],
+      "api_keys": [
+        "MKioskTy3"
+      ],
+      "conditions": [
+        "심근경색"
+      ]
     }
   }
 }

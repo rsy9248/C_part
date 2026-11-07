@@ -10,7 +10,8 @@ from typing import Optional
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel, Field
 
 # 상위 폴더 경로 추가하여 collector 임포트 가능하게 설정
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -18,8 +19,9 @@ from collector.collector import fetch_hospital_data, save_to_local_db, get_hospi
 from rules.disease_rules import (
     UNKNOWN_CODE,
     MAPPING_RULES_TEXT,
-    classify_disease,
+    classify_category,
     build_mapping_table,
+    build_category_table,
     print_disease_mapping,
 )
 
@@ -28,6 +30,17 @@ env_path = Path(__file__).resolve().parent.parent / ".env"
 load_dotenv(dotenv_path=env_path)
 
 app = FastAPI(title="구급차 실시간 음성 기반 병원 매칭 시스템")
+
+# CORS: 프론트(다른 주소/포트)에서 이 API를 호출할 수 있게 허용.
+# 개발 중에는 전체 허용(*). 배포/발표 때는 .env에 CORS_ORIGINS=http://localhost:3000,http://192.168.0.10:3000 처럼 지정.
+CORS_ORIGINS = [o.strip() for o in os.getenv("CORS_ORIGINS", "*").split(",") if o.strip()]
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=CORS_ORIGINS,
+    allow_credentials=False,   # "*"와 credentials=True는 브라우저가 거부하므로 사용하지 않음
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
 # =====================================================================
@@ -111,15 +124,17 @@ def calculate_haversine_distance(lat1, lon1, lat2, lon2):
 # [3] 요청 모델
 # =====================================================================
 class EmergencyRequest(BaseModel):
-    ambulance_lat: float
-    ambulance_lng: float
-    transcribed_text: str  # STT로 변환된 대화 내용
+    # A 파트 일지에서 받는 값 (환자 이름·전화번호가 담긴 STT 원문은 받지 않음)
+    category: str                       # 주증상 범주 (예: "chest pain", "neurologic deficit" ...)
+    grade: int = Field(..., ge=1, le=5)  # B 등급 1~5
+    lat: float                          # 구급차 위도
+    lng: float                          # 구급차 경도
 
 
 class NextRequest(BaseModel):
     rejected_hospital_id: Optional[str] = None  # 방금 거절한 병원 (없으면 단순 갱신)
-    ambulance_lat: Optional[float] = None       # 이동 중이면 최신 위치 전달
-    ambulance_lng: Optional[float] = None
+    lat: Optional[float] = None                 # 이동 중이면 최신 위치 전달
+    lng: Optional[float] = None
 
 
 class HospitalResponse(BaseModel):
@@ -200,7 +215,9 @@ def build_base(case_id: str, case: dict) -> dict:
         "case_id": case_id,
         "detected_disease_code": case["disease"]["code"],
         "detected_disease_name": case["disease"]["name"],
-        "matched_keywords": case["disease"]["matched_keywords"],
+        "category": case["category"],
+        "category_known": case["disease"]["category_known"],
+        "grade": case["grade"],
         "elapsed_sec": int(elapsed),
         "next_expand_in_sec": (
             None if time_stage >= last_stage
@@ -398,8 +415,8 @@ def hospital_request_view(req: dict) -> dict:
         "patient": {
             "disease_code": case["disease"]["code"],
             "disease_name": case["disease"]["name"],
-            "matched_keywords": case["disease"]["matched_keywords"],
-            "transcribed_text": case["transcribed_text"],
+            "category": case["category"],
+            "grade": case["grade"],
         },
         "ambulance": {
             "lat": case["lat"],
@@ -421,10 +438,11 @@ def emergency_match(request: EmergencyRequest):
         case_id = uuid.uuid4().hex[:12]
         sessions[case_id] = {
             "started_at": time.time(),
-            "lat": request.ambulance_lat,
-            "lng": request.ambulance_lng,
-            "transcribed_text": request.transcribed_text,
-            "disease": classify_disease(request.transcribed_text),
+            "lat": request.lat,
+            "lng": request.lng,
+            "category": request.category,
+            "grade": request.grade,
+            "disease": classify_category(request.category),
             "rejected_ids": set(),
             "requests": [],            # 병원에 보낸 요청 이력
             "current_request": None,   # 현재 진행 중인 요청
@@ -450,8 +468,8 @@ def emergency_match_next(case_id: str, body: NextRequest):
         case = get_case(case_id)
         if body.rejected_hospital_id:
             case["rejected_ids"].add(body.rejected_hospital_id)
-        if body.ambulance_lat is not None and body.ambulance_lng is not None:
-            case["lat"], case["lng"] = body.ambulance_lat, body.ambulance_lng
+        if body.lat is not None and body.lng is not None:
+            case["lat"], case["lng"] = body.lat, body.lng
         cancel_current_request(case)
         match = dispatch_next(case_id)
         return case_view(case_id, match)
@@ -540,6 +558,7 @@ def get_disease_codes():
     return {
         "unknown_code": UNKNOWN_CODE,
         "table": build_mapping_table(),
+        "category_table": build_category_table(),
         "rules": MAPPING_RULES_TEXT,
         "radius_stages_km": RADIUS_STAGES_KM,
         "expand_interval_sec": EXPAND_INTERVAL_SEC,
@@ -548,4 +567,10 @@ def get_disease_codes():
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("backend.main:app", host="127.0.0.1", port=8000, reload=True)
+    # 0.0.0.0: 같은 네트워크의 팀원 PC에서도 접속 가능 (http://내PC_IP:8000). 내 PC에서만 쓰려면 .env에 HOST=127.0.0.1
+    uvicorn.run(
+        "backend.main:app",
+        host=os.getenv("HOST", "0.0.0.0"),
+        port=int(os.getenv("PORT", "8000")),
+        reload=True,
+    )
